@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microbrewery Inventory & Brewing</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { text-align: center; color: #333; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 2px solid #f39c12; }
+    nav { background: #333; padding: 10px; border-radius: 5px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 5px; }
+    nav button { 
+      color: white; background: #555; border: none; padding: 10px 20px; 
+      cursor: pointer; border-radius: 3px; flex: 1; min-width: 150px;
+      transition: background 0.3s;
+    }
+    nav button:hover { background: #666; }
+    nav button.active { background: #f39c12; }
+    .tab { display: none; background: white; padding: 25px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .tab.active { display: block; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th { background: #f2f2f2; position: sticky; top: 0; }
+    th, td { border: 1px solid #ddd; padding: 12px 8px; text-align: left; }
+    tr:hover { background: #f9f9f9; }
+    .low-stock { background: #ffe6e6 !important; }
+    .low-stock td:first-child::before { content: "⚠ "; color: red; }
+    .form-group { margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .form-group label { min-width: 150px; font-weight: bold; }
+    input, select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; flex: 1; min-width: 200px; }
+    button[type="submit"] { 
+      background: #28a745; color: white; border: none; padding: 10px 25px; 
+      border-radius: 4px; cursor: pointer; font-size: 16px;
+    }
+    button[type="submit"]:hover { background: #218838; }
+    .form-actions { margin-top: 20px; }
+    .table-container { max-height: 400px; overflow-y: auto; margin-top: 20px; border: 1px solid #ddd; }
+    .alert { padding: 10px; border-radius: 4px; margin: 10px 0; }
+    .alert-warning { background: #fff3cd; border: 1px solid #ffc107; }
+    .alert-info { background: #d1ecf1; border: 1px solid #bee5eb; }
+    .empty-state { text-align: center; padding: 40px; color: #777; font-style: italic; }
+    .action-btn { 
+      padding: 5px 10px; margin: 0 3px; border: none; border-radius: 3px; 
+      cursor: pointer; font-size: 12px;
+    }
+    .edit-btn { background: #ffc107; color: black; }
+    .delete-btn { background: #dc3545; color: white; }
+    @media (max-width: 768px) {
+      .form-group { flex-direction: column; align-items: stretch; }
+      .form-group label { min-width: auto; }
+      nav button { min-width: 120px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🍺 Microbrewery Inventory & Brewing System</h1>
+  
+  <nav>
+    <button class="tab-btn active" data-tab="materials">📦 Raw Materials</button>
+    <button class="tab-btn" data-tab="products">🍺 Finished Products</button>
+    <button class="tab-btn" data-tab="recipes">📋 Recipes</button>
+    <button class="tab-btn" data-tab="brew">⚗️ Brewing Sessions</button>
+    <button class="tab-btn" data-tab="orders">📦 Client Orders</button>
+  </nav>
+
+  <!-- Raw Materials -->
+  <div id="materials" class="tab active">
+    <h2>📦 Raw Materials Inventory</h2>
+    <form id="material-form">
+      <div class="form-group">
+        <label for="material-name">Material Name:</label>
+        <input type="text" id="material-name" required placeholder="e.g., Pale Malt">
+      </div>
+      <div class="form-group">
+        <label for="material-quantity">Quantity:</label>
+        <input type="number" id="material-quantity" required min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label for="material-unit">Unit:</label>
+        <select id="material-unit" required>
+          <option value="">Select Unit</option>
+          <option value="kg">kg</option>
+          <option value="g">g</option>
+          <option value="L">L</option>
+          <option value="mL">mL</option>
+          <option value="pack">pack</option>
+          <option value="each">each</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="material-threshold">Reorder Threshold:</label>
+        <input type="number" id="material-threshold" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-actions">
+        <button type="submit">➕ Add Material</button>
+      </div>
+    </form>
+    
+    <div id="materials-warning" class="alert alert-warning" style="display:none;">
+      ⚠️ Some materials are below reorder threshold!
+    </div>
+    
+    <div class="table-container">
+      <table id="materials-table">
+        <thead><tr><th>Name</th><th>Quantity</th><th>Unit</th><th>Threshold</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Finished Products -->
+  <div id="products" class="tab">
+    <h2>🍺 Finished Products</h2>
+    <form id="product-form">
+      <div class="form-group">
+        <label for="product-name">Product Name:</label>
+        <input type="text" id="product-name" required placeholder="e.g., IPA">
+      </div>
+      <div class="form-group">
+        <label for="product-batch">Batch #:</label>
+        <input type="text" id="product-batch" required placeholder="e.g., IPA-2024-001">
+      </div>
+      <div class="form-group">
+        <label for="product-quantity">Quantity (Liters):</label>
+        <input type="number" id="product-quantity" required min="0" step="0.1" placeholder="0.0">
+      </div>
+      <div class="form-group">
+        <label for="product-packaging">Packaging:</label>
+        <select id="product-packaging">
+          <option value="">Select Packaging</option>
+          <option value="Keg">Keg</option>
+          <option value="Bottle">Bottle</option>
+          <option value="Can">Can</option>
+          <option value="Growler">Growler</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button type="submit">➕ Add Product</button>
+      </div>
+    </form>
+    
+    <div class="table-container">
+      <table id="products-table">
+        <thead><tr><th>Name</th><th>Batch #</th><th>Quantity (L)</th><th>Packaging</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recipes -->
+  <div id="recipes" class="tab">
+    <h2>📋 Recipes</h2>
+    <div class="alert alert-info">
+      Format: <strong>Material:Amount:Unit</strong> (comma-separated)<br>
+      Example: <em>Pale Malt:5:kg,Cascade Hops:100:g,Ale Yeast:1:pack</em>
+    </div>
+    <form id="recipe-form">
+      <div class="form-group">
+        <label for="recipe-name">Recipe Name:</label>
+        <input type="text" id="recipe-name" required placeholder="e.g., American IPA">
+      </div>
+      <div class="form-group">
+        <label for="recipe-ingredients">Ingredients:</label>
+        <input type="text" id="recipe-ingredients" required placeholder="Material:Amount:Unit,Material:Amount:Unit">
+      </div>
+      <div class="form-actions">
+        <button type="submit">➕ Add Recipe</button>
+      </div>
+    </form>
+    
+    <div class="table-container">
+      <table id="recipes-table">
+        <thead><tr><th>Name</th><th>Ingredients</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Brewing Sessions -->
+  <div id="brew" class="tab">
+    <h2>⚗️ Brewing Sessions</h2>
+    <form id="brew-form">
+      <div class="form-group">
+        <label for="brew-date">Brew Date:</label>
+        <input type="date" id="brew-date" required value="<?php echo date('Y-m-d'); ?>">
+      </div>
+      <div class="form-group">
+        <label for="brew-product">Beer Type:</label>
+        <select id="brew-product" required>
+          <option value="">Select Product</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="brew-recipe">Recipe:</label>
+        <select id="brew-recipe" required>
+          <option value="">Select Recipe</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="brew-quantity">Batch Quantity (Liters):</label>
+        <input type="number" id="brew-quantity" required min="1" step="0.1" placeholder="e.g., 20.0">
+      </div>
+      <div id="brew-check" class="alert" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="submit">⚗️ Start Brewing Session</button>
+      </div>
+    </form>
+    
+    <div class="table-container">
+      <table id="brew-table">
+        <thead><tr><th>Date</th><th>Beer</th><th>Recipe</th><th>Batch Qty (L)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Client Orders -->
+  <div id="orders" class="tab">
+    <h2>📦 Client Orders</h2>
+    <form id="order-form">
+      <div class="form-group">
+        <label for="order-client">Client Name:</label>
+        <input type="text" id="order-client" required placeholder="e.g., Bar XYZ">
+      </div>
+      <div class="form-group">
+        <label for="order-product">Product:</label>
+        <select id="order-product" required>
+          <option value="">Select Product</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="order-quantity">Quantity (Liters):</label>
+        <input type="number" id="order-quantity" required min="0.1" step="0.1" placeholder="0.0">
+      </div>
+      <div id="order-check" class="alert" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="submit">➕ Add Order</button>
+      </div>
+    </form>
+    
+    <div class="table-container">
+      <table id="orders-table">
+        <thead><tr><th>Client</th><th>Product</th><th>Quantity (L)</th><th>Date</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// Enhanced Data Storage with IDs
+let materials = JSON.parse(localStorage.getItem('materials') || '[]');
+let products = JSON.parse(localStorage.getItem('products') || '[]');
+let recipes = JSON.parse(localStorage.getItem('recipes') || '[]');
+let brews = JSON.parse(localStorage.getItem('brews') || '[]');
+let orders = JSON.parse(localStorage.getItem('orders') || '[]');
+
+// Generate unique IDs
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+// Tab Navigation
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tabId = btn.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+  });
+});
+
+// Save all data
+function saveData() {
+  localStorage.setItem('materials', JSON.stringify(materials));
+  localStorage.setItem('products', JSON.stringify(products));
+  localStorage.setItem('recipes', JSON.stringify(recipes));
+  localStorage.setItem('brews', JSON.stringify(brews));
+  localStorage.setItem('orders', JSON.stringify(orders));
+  updateAll();
+}
+
+// Update all displays
+function updateAll() {
+  renderMaterials();
+  renderProducts();
+  renderRecipes();
+  renderBrews();
+  renderOrders();
+  updateSelectOptions();
+  checkLowStock();
+}
+
+// Check for low stock materials
+function checkLowStock() {
+  const warningEl = document.getElementById('materials-warning');
+  const hasLowStock = materials.some(m => m.threshold && m.quantity <= m.threshold);
+  warningEl.style.display = hasLowStock ? 'block' : 'none';
+}
+
+// Update dropdown options
+function updateSelectOptions() {
+  const brewProductSelect = document.getElementById('brew-product');
+  const orderProductSelect = document.getElementById('order-product');
+  const brewRecipeSelect = document.getElementById('brew-recipe');
+  
+  // Clear and rebuild product options
+  [brewProductSelect, orderProductSelect].forEach(select => {
+    if (select) {
+      const firstOption = select.querySelector('option[value=""]');
+      select.innerHTML = '';
+      if (firstOption) select.appendChild(firstOption);
+      products.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = `${p.name} (${p.batch}) - ${p.quantity}L`;
+        option.disabled = p.quantity <= 0;
+        select.appendChild(option);
+      });
+    }
+  });
+  
+  // Update recipe options
+  if (brewRecipeSelect) {
+    const firstOption = brewRecipeSelect.querySelector('option[value=""]');
+    brewRecipeSelect.innerHTML = '';
+    if (firstOption) brewRecipeSelect.appendChild(firstOption);
+    recipes.forEach(r => {
+      const option = document.createElement('option');
+      option.value = r.id;
+      option.textContent = r.name;
+      brewRecipeSelect.appendChild(option);
+    });
+  }
+}
+
+// Render functions using DOM fragments for better performance
+function renderMaterials() {
+  const tbody = document.querySelector('#materials-table tbody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  if (materials.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No materials added yet</td></tr>';
+    return;
+  }
+  
+  const fragment = document.createDocumentFragment();
+  materials.forEach(m => {
+    const tr = document.createElement('tr');
+    if (m.threshold && m.quantity <= m.threshold) {
+      tr.classList.add('low-stock');
+    }
+    
+    tr.innerHTML = `
+      <td>${m.name}</td>
+      <td>${m.quantity.toFixed(2)}</td>
+      <td>${m.unit}</td>
+      <td>${m.threshold ? m.threshold.toFixed(2) : '-'}</td>
+      <td>${m.threshold && m.quantity <= m.threshold ? '⚠️ Low Stock' : '✓ OK'}</td>
+      <td>
+        <button class="action-btn edit-btn" onclick="editMaterial('${m.id}')">Edit</button>
+        <button class="action-btn delete-btn" onclick="deleteMaterial('${m.id}')">Delete</button>
+      </td>
+    `;
+    fragment.appendChild(tr);
+  });
+  tbody.appendChild(fragment);
+}
+
+function renderProducts() {
+  const tbody = document.querySelector('#products-table tbody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  if (products.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No products added yet</td></tr>';
+    return;
+  }
+  
+  const fragment = document.createDocumentFragment();
+  products.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.name}</td>
+      <td>${p.batch}</td>
+      <td>${p.quantity.toFixed(1)}</td>
+      <td>${p.packaging || '-'}</td>
+      <td>
+        <button class="action-btn edit-btn" onclick="editProduct('${p.id}')">Edit</button>
+        <button class="action-btn delete-btn" onclick="deleteProduct('${p.id}')">Delete</button>
+      </td>
+    `;
+    fragment.appendChild(tr);
+  });
+  tbody.appendChild(fragment);
+}
+
+function renderRecipes() {
+  const tbody = document.querySelector('#recipes-table tbody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  if (recipes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No recipes added yet</td></tr>';
+    return;
+  }
+  
+  const fragment = document.createDocumentFragment();
+  recipes.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.name}</td>
+      <td>${r.ingredients.map(i => `${i.name}: ${i.amount}${i.unit}`).join(', ')}</td>
+      <td>
+        <button class="action-btn edit-btn" onclick="editRecipe('${r.id}')">Edit</button>
+        <button class="action-btn delete-btn" onclick="deleteRecipe('${r.id}')">Delete</button>
+      </td>
+    `;
+    fragment.appendChild(tr);
+  });
+  tbody.appendChild(fragment);
+}
+
+function renderBrews() {
+  const tbody = document.querySelector('#brew-table tbody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  if (brews.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No brewing sessions yet</td></tr>';
+    return;
+  }
+  
+  // Sort by date descending
+  const sortedBrews = [...brews].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const fragment = document.createDocumentFragment();
+  sortedBrews.forEach(b => {
+    const product = products.find(p => p.id === b.productId);
+    const recipe = recipes.find(r => r.id === b.recipeId);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${b.date}</td>
+      <td>${product ? product.name : 'Unknown'}</td>
+      <td>${recipe ? recipe.name : 'Unknown'}</td>
+      <td>${b.quantity.toFixed(1)}</td>
+    `;
+    fragment.appendChild(tr);
+  });
+  tbody.appendChild(fragment);
+}
+
+function renderOrders() {
+  const tbody = document.querySelector('#orders-table tbody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  if (orders.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No orders yet</td></tr>';
+    return;
+  }
+  
+  const fragment = document.createDocumentFragment();
+  orders.forEach(o => {
+    const product = products.find(p => p.id === o.productId);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${o.client}</td>
+      <td>${product ? product.name : 'Unknown'}</td>
+      <td>${o.quantity.toFixed(1)}</td>
+      <td>${o.date}</td>
+    `;
+    fragment.appendChild(tr);
+  });
+  tbody.appendChild(fragment);
+}
+
+// Form Handlers
+document.getElementById('material-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const material = {
+    id: generateId(),
+    name: document.getElementById('material-name').value.trim(),
+    quantity: parseFloat(document.getElementById('material-quantity').value),
+    unit: document.getElementById('material-unit').value,
+    threshold: document.getElementById('material-threshold').value ? 
+               parseFloat(document.getElementById('material-threshold').value) : null
+  };
+  materials.push(material);
+  saveData();
+  this.reset();
+});
+
+document.getElementById('product-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const product = {
+    id: generateId(),
+    name: document.getElementById('product-name').value.trim(),
+    batch: document.getElementById('product-batch').value.trim(),
+    quantity: parseFloat(document.getElementById('product-quantity').value),
+    packaging: document.getElementById('product-packaging').value || null
+  };
+  products.push(product);
+  saveData();
+  this.reset();
+});
+
+document.getElementById('recipe-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const ingredients = document.getElementById('recipe-ingredients').value
+    .split(',')
+    .map(i => i.trim())
+    .filter(i => i)
+    .map(i => {
+      const [name, amount, unit] = i.split(':');
+      return {
+        name: name.trim(),
+        amount: parseFloat(amount),
+        unit: unit.trim()
+      };
+    });
+  
+  const recipe = {
+    id: generateId(),
+    name: document.getElementById('recipe-name').value.trim(),
+    ingredients
+  };
+  recipes.push(recipe);
+  saveData();
+  this.reset();
+});
+
+// Brewing form with validation
+document.getElementById('brew-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const recipeId = document.getElementById('brew-recipe').value;
+  const productId = document.getElementById('brew-product').value;
+  const quantity = parseFloat(document.getElementById('brew-quantity').value);
+  const date = document.getElementById('brew-date').value;
+  
+  const recipe = recipes.find(r => r.id === recipeId);
+  const product = products.find(p => p.id === productId);
+  
+  if (!recipe || !product) {
+    alert('Please select valid recipe and product');
+    return;
+  }
+  
+  // Check if enough materials are available
+  const insufficientMaterials = [];
+  recipe.ingredients.forEach(ing => {
+    const material = materials.find(m => 
+      m.name.toLowerCase() === ing.name.toLowerCase() && 
+      m.unit === ing.unit
+    );
+    if (!material || material.quantity < (ing.amount * quantity)) {
+      insufficientMaterials.push(ing.name);
+    }
+  });
+  
+  if (insufficientMaterials.length > 0) {
+    alert(`Insufficient materials: ${insufficientMaterials.join(', ')}`);
+    return;
+  }
+  
+  // Deduct materials
+  recipe.ingredients.forEach(ing => {
+    const material = materials.find(m => 
+      m.name.toLowerCase() === ing.name.toLowerCase() && 
+      m.unit === ing.unit
+    );
+    if (material) {
+      material.quantity -= ing.amount * quantity;
+    }
+  });
+  
+  // Add to product quantity
+  product.quantity += quantity;
+  
+  // Record brewing session
+  brews.push({
+    id: generateId(),
+    date,
+    productId,
+    recipeId,
+    quantity
+  });
+  
+  saveData();
+  this.reset();
+  document.getElementById('brew-date').value = new Date().toISOString().split('T')[0];
+});
+
+// Order form with validation
+document.getElementById('order-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const productId = document.getElementById('order-product').value;
+  const quantity = parseFloat(document.getElementById('order-quantity').value);
+  const product = products.find(p => p.id === productId);
+  
+  if (!product) {
+    alert('Please select a valid product');
+    return;
+  }
+  
+  if (product.quantity < quantity) {
+    alert(`Insufficient stock. Available: ${product.quantity}L`);
+    return;
+  }
+  
+  // Deduct from product
+  product.quantity -= quantity;
+  
+  // Add order
+  orders.push({
+    id: generateId(),
+    client: document.getElementById('order-client').value.trim(),
+    productId,
+    quantity,
+    date: new Date().toISOString().split('T')[0]
+  });
+  
+  saveData();
+  this.reset();
+});
+
+// Delete functions
+function deleteMaterial(id) {
+  if (confirm('Are you sure you want to delete this material?')) {
+    materials = materials.filter(m => m.id !== id);
+    saveData();
+  }
+}
+
+function deleteProduct(id) {
+  if (confirm('Are you sure you want to delete this product?')) {
+    products = products.filter(p => p.id !== id);
+    saveData();
+  }
+}
+
+function deleteRecipe(id) {
+  if (confirm('Are you sure you want to delete this recipe?')) {
+    recipes = recipes.filter(r => r.id !== id);
+    saveData();
+  }
+}
+
+// Edit functions (basic implementation - can be expanded)
+function editMaterial(id) {
+  const material = materials.find(m => m.id === id);
+  if (!material) return;
+  
+  document.getElementById('material-name').value = material.name;
+  document.getElementById('material-quantity').value = material.quantity;
+  document.getElementById('material-unit').value = material.unit;
+  document.getElementById('material-threshold').value = material.threshold || '';
+  
+  // Change form to update mode
+  const form = document.getElementById('material-form');
+  const submitBtn = form.querySelector('button[type="submit"]');
+  submitBtn.textContent = 'Update Material';
+  submitBtn.style.background = '#007bff';
+  
+  // Remove old submit handler
+  form.onsubmit = null;
+  
+  // Add update handler
+  form.addEventListener('submit', function updateHandler(e) {
+    e.preventDefault();
+    
+    material.name = document.getElementById('material-name').value.trim();
+    material.quantity = parseFloat(document.getElementById('material-quantity').value);
+    material.unit = document.getElementById('material-unit').value;
+    material.threshold = document.getElementById('material-threshold').value ? 
+                        parseFloat(document.getElementById('material-threshold').value) : null;
+    
+    saveData();
+    this.reset();
+    submitBtn.textContent = '➕ Add Material';
+    submitBtn.style.background = '';
+    
+    // Restore original handler
+    this.onsubmit = null;
+    this.addEventListener('submit', arguments.callee);
+  }, { once: true });
+  
+  // Scroll to form
+  document.querySelector('[data-tab="materials"]').click();
+}
+
+// Similar edit functions can be added for products and recipes
+
+// Initialize
+updateAll();
+
+// Set today's date for brewing form
+document.getElementById('brew-date').value = new Date().toISOString().split('T')[0];
+</script>
+</body>
+</html>
