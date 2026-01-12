@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+*.lnk
+
+# Node
+node_modules/
+npm-debug.log
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
